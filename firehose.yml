@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Kinesis firehose to deliver web events to s3 from API gateway
+
+Parameters:
+  Prefix:
+    Type: String
+
+Resources:
+  DeliveryStreamWebAnalytics:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: deliver-web-analytics
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !Sub arn:aws:s3:::${Prefix}-delivery-web-event
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 1
+        CompressionFormat: GZIP
+        Prefix: web-event/
+        RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/kinesis-delivery-web-analytics

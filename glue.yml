@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: API gateway to capture web events
+
+Parameters:
+  Prefix:
+    Type: String
+
+Resources:
+  GlueJobTransformPq:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: json-to-pq-first
+      Description: Transform json file to parquet
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/glue-json2pq-web-analytics
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub s3://${Prefix}-infra/cloudformation/web-analytics/code/glue/json2pq.py
+      AllocatedCapacity: 2
+      
+  GlueDBWebAnalytics:
+    Type: AWS::Glue::Database
+    Properties:
+      DatabaseInput:
+        Name: web-analytics-events
+      CatalogId: !Ref AWS::AccountId
+
+  GlueCrawlerWebAnalytics:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: web-analytics-events-crawler
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/glue-crawler-web-analytics
+      DatabaseName: web-analytics-events
+      Targets:
+        S3Targets:
+          - Path: !Sub s3://${Prefix}-convert-web-event/web-event
+            Exclusions:
+              - "*_$folder$"

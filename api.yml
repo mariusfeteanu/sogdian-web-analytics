@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: API gateway to capture web events
+
+Parameters:
+  Prefix:
+    Type: String
+
+Resources:
+  APICollectWebEvents:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Description: API to collect web events and send them to kinesis
+      EndpointConfiguration:
+        Types:
+          - EDGE
+      Name: api-collect-web-events
+
+  APIResourceCollectWebEvents:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt APICollectWebEvents.RootResourceId
+      PathPart: log
+      RestApiId: !Ref APICollectWebEvents
+
+  APIMethodPOSTCollectWebEvents:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: True
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        Type: AWS
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:send-to-kinesis-web-analytics/invocations
+        IntegrationHttpMethod: POST
+        IntegrationResponses:
+          - StatusCode: 200
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: 200
+      OperationName: Log event
+      ResourceId: !Ref APIResourceCollectWebEvents
+      RestApiId: !Ref APICollectWebEvents
+
+  APIDeploymentCollectWebEvents:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      Description: Event collection deployment
+      RestApiId: !Ref APICollectWebEvents
+    DependsOn:
+      - APIMethodPOSTCollectWebEvents
+
+  APIStageDevCollectWebEvents:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref APIDeploymentCollectWebEvents
+      Description: Development stage of log collections
+      RestApiId: !Ref APICollectWebEvents
+      StageName: dev
+
+  APIKeyDevCollectWebEvents:
+    Type: AWS::ApiGateway::ApiKey
+    DependsOn:
+      - APIStageDevCollectWebEvents
+    Properties:
+      Description: API Key for dev stage of web event collection
+      Enabled: True
+      Name: dev_collect_web_events
+      StageKeys:
+        - RestApiId: !Ref APICollectWebEvents
+          StageName: !Ref APIStageDevCollectWebEvents
+
+  APIUsagePlanDevWebEvents:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      ApiStages:
+      - ApiId: !Ref APICollectWebEvents
+        Stage: !Ref APIStageDevCollectWebEvents
+
+  APIUsagePlanKeyDevWebEvents:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref APIKeyDevCollectWebEvents
+      KeyType: API_KEY
+      UsagePlanId: !Ref APIUsagePlanDevWebEvents
+
+  LambdaCaptureWebAnalytics:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description: Function to feed events from API Gateway to Kinesis Firehose
+      FunctionName: send-to-kinesis-web-analytics
+      Handler: lambda/send2kinesis.lambda_handler
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/lambda-transfer-web-analytics
+      Runtime: python3.6
+      Code:
+        S3Bucket: !Sub '${Prefix}-infra'
+        S3Key: cloudformation/web-analytics/code/dist.zip
+
+  LambdaPermissionDeliverEvents:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaCaptureWebAnalytics
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APICollectWebEvents}/*/POST/log

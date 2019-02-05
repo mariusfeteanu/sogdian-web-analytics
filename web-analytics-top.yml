@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Top level template for a web analytics stack
+
+Parameters:
+  Prefix:
+    Type: String
+    Description: This will be prefixed to all created resources
+
+Resources:
+  StackS3:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL:
+        !Sub https://s3.amazonaws.com/${Prefix}-infra/cloudformation/web-analytics/s3.yml
+      Parameters:
+        Prefix: !Ref Prefix
+
+  StackAPI:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      TemplateURL:
+        !Sub https://s3.amazonaws.com/${Prefix}-infra/cloudformation/web-analytics/api.yml
+      Parameters:
+        Prefix: !Ref Prefix
+
+  StackFirehose:
+    Type: "AWS::CloudFormation::Stack"
+    DependsOn:
+      - StackS3
+    Properties:
+      TemplateURL:
+        !Sub https://s3.amazonaws.com/${Prefix}-infra/cloudformation/web-analytics/firehose.yml
+      Parameters:
+        Prefix: !Ref Prefix
+
+  StackGlue:
+    Type: "AWS::CloudFormation::Stack"
+    DependsOn:
+      - StackS3
+    Properties:
+      TemplateURL:
+        !Sub https://s3.amazonaws.com/${Prefix}-infra/cloudformation/web-analytics/glue.yml
+      Parameters:
+        Prefix: !Ref Prefix

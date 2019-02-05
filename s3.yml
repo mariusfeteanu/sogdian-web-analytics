@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 buckets to hold web analytics event data
+
+Parameters:
+  Prefix:
+    Type: String
+
+Resources:
+  BucketDeliveryWebAnalytics:
+    Type: "AWS::S3::Bucket"
+    DependsOn:
+      - LambdaPermissionConvertJsonToParquet
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName:
+        !Sub '${Prefix}-delivery-web-event'
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:convert-json-to-parquet-web-analytics
+
+  LambdaConvertJsonToParquet:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description: Function to convert json events to parquet
+      FunctionName: convert-json-to-parquet-web-analytics
+      Handler: lambda/json2pq.handler
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/lambda-convert-json-to-parquet
+      Runtime: python3.6
+      Code:
+        S3Bucket: !Sub '${Prefix}-infra'
+        S3Key: cloudformation/web-analytics/code/dist.zip
+
+  LambdaPermissionConvertJsonToParquet:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaConvertJsonToParquet
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  BucketConvertWebAnalytics:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName:
+        !Sub '${Prefix}-convert-web-event'
